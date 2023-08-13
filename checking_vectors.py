@@ -7,8 +7,7 @@ qdrant_client = QdrantClient(
     api_key="lr9JcrGVAJA3udCtchE21Byj4_vog4h_X0Xl1utfDa2Ut3g4k_e8Rw",
 )
 
-qdrant_client.recreate_collection(collection_name="full_conversation", vectors_config=VectorParams(size=1536, distance=Distance.COSINE))
-
-qdrant_client.recreate_collection(collection_name="summaries", vectors_config=VectorParams(size=512, distance=Distance.COSINE))
-
-print(qdrant_client.get_collections())
+print(qdrant_client.retrieve(
+    collection_name="summaries",
+    ids=[1,2,3]
+))
