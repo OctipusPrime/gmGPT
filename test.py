@@ -9,6 +9,8 @@ qdrant_client = QdrantClient(
 
 qdrant_client.recreate_collection(collection_name="full_conversation", vectors_config=VectorParams(size=1536, distance=Distance.COSINE))
 
-qdrant_client.recreate_collection(collection_name="summaries", vectors_config=VectorParams(size=512, distance=Distance.COSINE))
+qdrant_client.recreate_collection(collection_name="summaries", vectors_config=VectorParams(size=384, distance=Distance.COSINE))
 
 print(qdrant_client.get_collections())
+
+print(qdrant_client.get_collection(collection_name = "summaries"))
