@@ -1,13 +1,13 @@
 import streamlit as st
 import os
 import re
-import json
 from langchain.embeddings import HuggingFaceEmbeddings, OpenAIEmbeddings
 from qdrant_client import QdrantClient
-from qdrant_client.http import models
 from langchain.vectorstores import Qdrant
 from qdrant_client.models import Distance, VectorParams
-
+from langchain.chat_models.openai import ChatOpenAI
+from langchain.prompts.chat import HumanMessagePromptTemplate, SystemMessagePromptTemplate
+from langchain.prompts import ChatPromptTemplate
 
 # Set variables
 vault_address = "/Users/yanbarta/Library/Mobile Documents/iCloud~md~obsidian/Documents/The Foundation/TTRPG/"
@@ -39,6 +39,16 @@ with open("/Users/yanbarta/openai_api_token.txt", "r") as api_token:
 # Large 1536 encoder
 openai_embedding = OpenAIEmbeddings(openai_api_key=openai_token)
 
+# Model for summarisation
+summary_model = ChatOpenAI(openai_api_key=openai_token,
+                       model="gpt-3.5-turbo",
+                       temperature=0.5,
+                       )
+
+summary_prompt = ChatPromptTemplate.from_messages([
+    SystemMessagePromptTemplate.from_template("You are a summarisation tool. Your task is to use simple, self-contained sentences that summarise user input."),
+    HumanMessagePromptTemplate.from_template("{text}")])
+
 
 # QDrant varaibles
 full_text_db_name = "full_conversation"
@@ -61,6 +71,7 @@ full_text_vectorstore = Qdrant(
     collection_name=full_text_db_name,
     embeddings=openai_embedding,
 )
+
 def read_file(path):
     with open(path, "r") as f:
         content = f.read()
@@ -96,6 +107,7 @@ def search_vectorstore(query, vectorstore, k):
     
     else:
         raise TypeError("Query must be either string or list of strings")
+
 
 def continue_adventure():
     last_x_sentences = split_to_setences(read_file(summary_path))
@@ -157,6 +169,18 @@ def on_text_update(key, path):
         write_file(path, updated_text)
 
 def transfer_to_memory():
+    # get game file and add it to full text database
+    game_text = read_file(game_path)
+    game_paragraphs = split_to_paragraphs(game_text)
+    full_text_vectorstore.add_texts(game_paragraphs)
+
+    # create a summary
+
+    # add summary to summary file and and database
+
+    # wipe game file and append content to full text file
+    write_file(game_path, "")
+    write_file(current_situation_path, "")
     return True
 
 def rebuild_memory():
@@ -177,4 +201,7 @@ def rebuild_memory():
     summary_vectorstore.add_texts(summary_sentences)
 
 
-continue_adventure()
+
+
+text_for_summary = read_file(game_path)
+print(summary_model(summary_prompt.format_prompt(text=text_for_summary).to_messages()).content)

@@ -1,13 +1,13 @@
 import streamlit as st
 import os
 import re
-import json
 from langchain.embeddings import HuggingFaceEmbeddings, OpenAIEmbeddings
 from qdrant_client import QdrantClient
-from qdrant_client.http import models
 from langchain.vectorstores import Qdrant
 from qdrant_client.models import Distance, VectorParams
-
+from langchain.chat_models.openai import ChatOpenAI
+from langchain.prompts.chat import HumanMessagePromptTemplate, SystemMessagePromptTemplate
+from langchain.prompts import ChatPromptTemplate
 
 # Set variables
 vault_address = "/Users/yanbarta/Library/Mobile Documents/iCloud~md~obsidian/Documents/The Foundation/TTRPG/"
@@ -35,10 +35,23 @@ embedding = HuggingFaceEmbeddings(model_name='all-MiniLM-L6-v2')
 with open("/Users/yanbarta/openai_api_token.txt", "r") as api_token:
     openai_token = api_token.read()
 
-
 # Large 1536 encoder
 openai_embedding = OpenAIEmbeddings(openai_api_key=openai_token)
 
+# Model for summarisation
+summary_model = ChatOpenAI(openai_api_key=openai_token,
+                        openai_api_base="https://dsopenaidev.openai.azure.com/",
+                        model="gpt-3.5-turbo",
+                        temperature=0.5,
+                       )
+
+story_model = ChatOpenAI(openai_api_key=openai_token,
+                         model="gpt-4",
+                         temperature=1.0)
+
+prompt = ChatPromptTemplate.from_messages([
+    SystemMessagePromptTemplate.from_template("{instructions}"),
+    HumanMessagePromptTemplate.from_template("{text}")])
 
 # QDrant varaibles
 full_text_db_name = "full_conversation"
@@ -61,6 +74,7 @@ full_text_vectorstore = Qdrant(
     collection_name=full_text_db_name,
     embeddings=openai_embedding,
 )
+
 def read_file(path):
     with open(path, "r") as f:
         content = f.read()
@@ -69,6 +83,10 @@ def read_file(path):
 def write_file(path, content):
     with open(path, "w") as f:
         f.write(content)
+
+def append_to_file(path, text):
+    with open(path, "a") as f:
+        f.write(text)
 
 def split_to_setences(content):
     content = content.replace("\n", " ")
@@ -97,6 +115,7 @@ def search_vectorstore(query, vectorstore, k):
     else:
         raise TypeError("Query must be either string or list of strings")
 
+
 def continue_adventure():
     last_x_sentences = split_to_setences(read_file(summary_path))
     # Get only last x sentences of the summary
@@ -113,12 +132,8 @@ def continue_adventure():
     game_paragraphs = split_to_paragraphs(latest_conversation)
     best_game_results = search_vectorstore(game_paragraphs, full_text_vectorstore, k_full_text_from_game)
     best_game_results_for_print = ('\n'.join(best_game_results))
-
+    query_system = instructions
     query = f"""
-# Instructions
-
-{instructions}
-
 # Setting
 
 {setting_info}
@@ -147,8 +162,8 @@ def continue_adventure():
 Narrator:
     """
 
-    print(query)
-    return query
+    response = story_model(prompt.format_prompt(instructions=query_system, text=query).to_messages()).content
+    append_to_file(game_path, "\nNarrator:\n" + response)
 
 
 def on_text_update(key, path):
@@ -157,6 +172,23 @@ def on_text_update(key, path):
         write_file(path, updated_text)
 
 def transfer_to_memory():
+    # get game file and add it to full text database
+    game_text = read_file(game_path)
+    game_paragraphs = split_to_paragraphs(game_text)
+    full_text_vectorstore.add_texts(game_paragraphs)
+
+    # Append to full text
+    append_to_file(prevously_path, game_text)
+
+    # create a summary
+    summary = summary_model(prompt.format_prompt(instructions= "You are a summarisation tool. Your task is to use simple, self-contained sentences that summarise user input.",
+                                                 text=game_text).to_messages()).content
+    # add summary to summary file and and database
+    summary_vectorstore.add_texts(split_to_setences(summary))
+    append_to_file(summary_path, summary)
+    # wipe game file and append content to full text file
+    write_file(game_path, "")
+    write_file(current_situation_path, "")
     return True
 
 def rebuild_memory():
@@ -175,6 +207,7 @@ def rebuild_memory():
     summary_sentences = split_to_setences(read_file(summary_path))
     # Add it to the database
     summary_vectorstore.add_texts(summary_sentences)
+
 
 
 def main():
