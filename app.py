@@ -40,18 +40,11 @@ with open("/Users/yanbarta/openai_api_token.txt", "r") as api_token:
 openai_embedding = OpenAIEmbeddings(openai_api_key=openai_token)
 
 # Model for summarisation
-summary_model = AzureOpenAI(
-    openai_api_base="https://dsopenaidev.openai.azure.com/",
-    openai_api_type="azure",
-    openai_api_version="2023-03-15-preview",
-    openai_api_key=openai_token,
-    model="gpt-3.5-turbo",
-    temperature=0.5,
-    )
+summary_model = ChatOpenAI(openai_api_key=openai_token,
+                           model="gpt-3.5-turbo", temperature=0.5)
 
 story_model = ChatOpenAI(openai_api_key=openai_token,
-                         model="gpt-3.5-turbo",
-                         temperature=0.5)
+                         model="gpt-4",)
 
 prompt = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template("{instructions}"),
@@ -195,7 +188,7 @@ def transfer_to_memory():
     #summary = summary_model(prompt.format_prompt(instructions= "You are a summarisation tool. Your task is to use simple, self-contained sentences that summarise user input.",text=game_text).to_messages()).content
     
     summary_instructions = f"""You are a summarisation tool. Your task is to use simple, self-contained sentences that summarise the user input."""
-    summary = story_model(prompt.format_prompt(instructions=summary_instructions, text=game_text).to_messages()).content
+    summary = summary_model(prompt.format_prompt(instructions=summary_instructions, text=game_text).to_messages()).content
     # add summary to summary file and and database
     summary_vectorstore.add_texts(split_to_setences(summary))
     append_to_file(summary_path, summary)
