@@ -5,6 +5,7 @@ from langchain.embeddings import HuggingFaceEmbeddings, OpenAIEmbeddings
 from qdrant_client import QdrantClient
 from langchain.vectorstores import Qdrant
 from qdrant_client.models import Distance, VectorParams
+from langchain.llms import AzureOpenAI
 from langchain.chat_models.openai import ChatOpenAI
 from langchain.prompts.chat import HumanMessagePromptTemplate, SystemMessagePromptTemplate
 from langchain.prompts import ChatPromptTemplate
@@ -13,7 +14,7 @@ from langchain.prompts import ChatPromptTemplate
 vault_address = "/Users/yanbarta/Library/Mobile Documents/iCloud~md~obsidian/Documents/The Foundation/TTRPG/"
 current_adventure = "Bardic tales/"
 db_path = "/Users/yanbarta/Documents/gmGPT/"
-last_x_summary_senteces = 5
+last_x_summary_senteces = 3
 
 characer_path = os.path.join(vault_address, current_adventure, "Character.md")
 setting_path = os.path.join(vault_address, current_adventure, "Setting.md")
@@ -24,8 +25,8 @@ game_path = os.path.join(vault_address, current_adventure, "Game.md")
 instructions_path = os.path.join(vault_address, current_adventure, "Instructions.md")
 
 # When doing a vector search using current sitution, how many sentences from the summary should be pulled
-k_summary_sentences_from_situation = 7
-k_full_text_from_game = 4
+k_summary_sentences_from_situation = 3
+k_full_text_from_game = 3
 
 # Small 512 encoder
 embedding = HuggingFaceEmbeddings(model_name='all-MiniLM-L6-v2')
@@ -39,15 +40,18 @@ with open("/Users/yanbarta/openai_api_token.txt", "r") as api_token:
 openai_embedding = OpenAIEmbeddings(openai_api_key=openai_token)
 
 # Model for summarisation
-summary_model = ChatOpenAI(openai_api_key=openai_token,
-                        openai_api_base="https://dsopenaidev.openai.azure.com/",
-                        model="gpt-3.5-turbo",
-                        temperature=0.5,
-                       )
+summary_model = AzureOpenAI(
+    openai_api_base="https://dsopenaidev.openai.azure.com/",
+    openai_api_type="azure",
+    openai_api_version="2023-03-15-preview",
+    openai_api_key=openai_token,
+    model="gpt-3.5-turbo",
+    temperature=0.5,
+    )
 
 story_model = ChatOpenAI(openai_api_key=openai_token,
-                         model="gpt-4",
-                         temperature=1.0)
+                         model="gpt-3.5-turbo",
+                         temperature=0.5)
 
 prompt = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template("{instructions}"),
@@ -63,16 +67,16 @@ qdrant_address = "https://fdd4a708-5232-433e-a5f0-830c4eb7e177.eu-central-1-0.aw
 
 qdrant_client = QdrantClient(url=qdrant_address, api_key=qdrant_token)
 
-summary_vectorstore = Qdrant(
-    client=qdrant_client,
-    collection_name=summary_db_name,
-    embeddings=embedding,
-)
-
 full_text_vectorstore = Qdrant(
     client=qdrant_client,
     collection_name=full_text_db_name,
     embeddings=openai_embedding,
+)
+
+summary_vectorstore = Qdrant(
+    client=qdrant_client,
+    collection_name=summary_db_name,
+    embeddings=embedding,
 )
 
 def read_file(path):
@@ -99,17 +103,17 @@ def split_to_paragraphs(content):
     paragraphs = [p.strip() for p in paragraphs if p.strip()]
     return paragraphs
 
-def search_vectorstore(query, vectorstore, k):
+def search_vectorstore(query, vectorstore, number_of_results):
     if isinstance(query, list):
         matches = set()
         for item in query:
-            search_result = vectorstore.similarity_search(item, k=k)
+            search_result = vectorstore.similarity_search(item, k=number_of_results)
             for match in search_result:
                 matches.add(match.page_content)
         return list(matches)
     
     elif isinstance(query, str):
-        matches = vectorstore.similarity_search(query, k=k)
+        matches = vectorstore.similarity_search(query, k=number_of_results)
         return [match.page_content for match in matches]
     
     else:
@@ -120,7 +124,7 @@ def continue_adventure():
     last_x_sentences = split_to_setences(read_file(summary_path))
     # Get only last x sentences of the summary
     if len(last_x_sentences) > last_x_summary_senteces:
-        last_x_sentences = last_x_sentences[last_x_summary_senteces:]
+        last_x_sentences = last_x_sentences[-last_x_summary_senteces:]
     last_x_sentences_text = '.\n \n'.join(last_x_sentences)
     current_situation = read_file(current_situation_path)
     summary_search_result = search_vectorstore(current_situation, summary_vectorstore, k_summary_sentences_from_situation)
@@ -129,11 +133,18 @@ def continue_adventure():
     setting_info = read_file(setting_path)
     instructions = read_file(instructions_path)
     latest_conversation = read_file(game_path)
+    if latest_conversation:
+        game_paragraphs = split_to_paragraphs(latest_conversation)
+    else:
+        game_paragraphs = [current_situation]
     game_paragraphs = split_to_paragraphs(latest_conversation)
     best_game_results = search_vectorstore(game_paragraphs, full_text_vectorstore, k_full_text_from_game)
     best_game_results_for_print = ('\n'.join(best_game_results))
     query_system = instructions
     query = f"""
+# Instructions
+{instructions}
+
 # Setting
 
 {setting_info}
@@ -158,11 +169,11 @@ def continue_adventure():
 {current_situation}
 
 ## Conversation
-
+{latest_conversation}
 Narrator:
     """
-
-    response = story_model(prompt.format_prompt(instructions=query_system, text=query).to_messages()).content
+    print(query)
+    response = story_model(prompt.format_prompt(instructions=query_system, text=query).to_messages(), stop=["Player:"]).content
     append_to_file(game_path, "\nNarrator:\n" + response)
 
 
@@ -181,8 +192,10 @@ def transfer_to_memory():
     append_to_file(prevously_path, game_text)
 
     # create a summary
-    summary = summary_model(prompt.format_prompt(instructions= "You are a summarisation tool. Your task is to use simple, self-contained sentences that summarise user input.",
-                                                 text=game_text).to_messages()).content
+    #summary = summary_model(prompt.format_prompt(instructions= "You are a summarisation tool. Your task is to use simple, self-contained sentences that summarise user input.",text=game_text).to_messages()).content
+    
+    summary_instructions = f"""You are a summarisation tool. Your task is to use simple, self-contained sentences that summarise the user input."""
+    summary = story_model(prompt.format_prompt(instructions=summary_instructions, text=game_text).to_messages()).content
     # add summary to summary file and and database
     summary_vectorstore.add_texts(split_to_setences(summary))
     append_to_file(summary_path, summary)
@@ -192,8 +205,7 @@ def transfer_to_memory():
     return True
 
 def rebuild_memory():
-    # Wipe full text database
-    # uses larger encoder - openai
+    # Reset full text database
     qdrant_client.recreate_collection(collection_name=full_text_db_name, vectors_config=VectorParams(size=1536, distance=Distance.COSINE))
     # Get all paragraphs from Previously
     full_text_paragraphs = split_to_paragraphs(read_file(prevously_path))
@@ -210,12 +222,15 @@ def rebuild_memory():
 
 
 
+
 def main():
     st.set_page_config(page_title="gmGPT", page_icon="::robot::")
     
     st.header("gmGPT")
-    st.subheader("Your personal Game Master for a DnD game.")
-    st.text_area(label="Current situation", key="current_situation_input",height=100, value=read_file(current_situation_path), on_change=lambda: on_text_update("current_situation_input", current_situation_path))
+    st.subheader("Your personal DnD Game Master")
+    st.text_area(label="Current situation", key="current_situation_input",height=100,
+                  value=read_file(current_situation_path), 
+                  on_change=lambda: on_text_update("current_situation_input", current_situation_path))
     col1, col2, col3 = st.columns(3)
     with col1:
         st.button("Start/Continue adventure", 
@@ -237,10 +252,14 @@ def main():
     
     with st.sidebar:
         st.subheader("Supporting information")
-        st.text_area(label="Who is your character?", height= 200, value=read_file(characer_path), key="character_input", on_change=lambda: on_text_update("character_input", characer_path))
-        st.text_area(label="Setting",height= 200, value=read_file(setting_path), key="setting_input", on_change=lambda: on_text_update("setting_input", setting_path))
-        st.text_area(label="Summary",height= 400,value=read_file(summary_path), key="summary_input", on_change=lambda: on_text_update("summary_input", summary_path))
-        st.text_area(label="Previously",height= 500, value=read_file(prevously_path), key="previously_input", on_change=lambda: on_text_update("previously_input", prevously_path))
+        st.text_area(label="Who is your character?", height= 200, 
+                     value=read_file(characer_path), key="character_input", on_change=lambda: on_text_update("character_input", characer_path))
+        st.text_area(label="Setting",height= 200, 
+                     value=read_file(setting_path), key="setting_input", on_change=lambda: on_text_update("setting_input", setting_path))
+        st.text_area(label="Summary",height= 400,value=read_file(summary_path), 
+                     key="summary_input", on_change=lambda: on_text_update("summary_input", summary_path))
+        st.text_area(label="Previously",height= 500, value=read_file(prevously_path), 
+                     key="previously_input", on_change=lambda: on_text_update("previously_input", prevously_path))
 
 if __name__ == '__main__':
     main()
