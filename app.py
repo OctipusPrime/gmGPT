@@ -6,7 +6,6 @@ from langchain.embeddings import HuggingFaceEmbeddings, OpenAIEmbeddings
 from qdrant_client import QdrantClient
 from langchain.vectorstores import Qdrant
 from qdrant_client.models import Distance, VectorParams
-from langchain.llms import AzureOpenAI
 from langchain.chat_models.openai import ChatOpenAI
 from langchain.prompts.chat import HumanMessagePromptTemplate, SystemMessagePromptTemplate
 from langchain.prompts import ChatPromptTemplate
@@ -50,6 +49,8 @@ story_model = ChatOpenAI(openai_api_key=openai_token,
 prompt = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template("{instructions}"),
     HumanMessagePromptTemplate.from_template("{text}")])
+
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
 # QDrant varaibles
 full_text_db_name = "full_conversation"
@@ -188,7 +189,7 @@ def transfer_to_memory():
     # create a summary
     #summary = summary_model(prompt.format_prompt(instructions= "You are a summarisation tool. Your task is to use simple, self-contained sentences that summarise user input.",text=game_text).to_messages()).content
     
-    summary_instructions = f"""You are a summarisation tool. Your task is to use simple, self-contained sentences that summarise the user input."""
+    summary_instructions = f"""You are a summarisation tool. Your task is to use simple sentences that summarise the user input. Each sentence must be self-contained and not rely on any other sentence to make sense."""
     summary = summary_model(prompt.format_prompt(instructions=summary_instructions, text=game_text).to_messages()).content
     # add summary to summary file and and database
     summary_vectorstore.add_texts(split_to_setences(summary))
