@@ -215,20 +215,37 @@ def rebuild_memory():
     # Add it to the database
     summary_vectorstore.add_texts(summary_sentences)
 
+def main():
+    st.set_page_config(page_title="gmGPT", page_icon="::robot::")
+    
+    st.header("gmGPT")
+    st.subheader("Your personal ttrpg Game Master.")
+    st.text_area(label="Current situation", key="current_situation_input",height=100, value=read_file(current_situation_path), on_change=lambda: on_text_update("current_situation_input", current_situation_path))
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.button("Start/Continue adventure", 
+                  key="start_button", 
+                  help="Takes context + current situation + past conversation and generates Narrator response",
+                  on_click=continue_adventure)
+    with col2:
+        st.button("Transfer into memory", 
+                  key="transfer_button", 
+                  help="Transfer current conversation into memory to reduce context size (= cost per response)",
+                  on_click = transfer_to_memory)
+    
+    with col3:
+        st.button("Rebuild memory", 
+                  key="rebuild_button", 
+                  help="Wipes current database and rebuilds it from Summary and Previously.",
+                  on_click = rebuild_memory)
+    st.text_area(label="Game", key="game_space_input", value=read_file(game_path), height= 1000, on_change=lambda: on_text_update("game_space_input", game_path))
+    
+    with st.sidebar:
+        st.subheader("Supporting information")
+        st.text_area(label="Who is your character?", height= 200, value=read_file(characer_path), key="character_input", on_change=lambda: on_text_update("character_input", characer_path))
+        st.text_area(label="Setting",height= 200, value=read_file(setting_path), key="setting_input", on_change=lambda: on_text_update("setting_input", setting_path))
+        st.text_area(label="Summary",height= 400,value=read_file(summary_path), key="summary_input", on_change=lambda: on_text_update("summary_input", summary_path))
+        st.text_area(label="Previously",height= 500, value=read_file(prevously_path), key="previously_input", on_change=lambda: on_text_update("previously_input", prevously_path))
 
-# Create an argument parser
-parser = argparse.ArgumentParser(description='Adventure game command line interface')
-
-# Add the arguments
-parser.add_argument('command', choices=['continue', 'transfer', 'rebuild'], help='The command to run')
-
-# Parse the arguments
-args = parser.parse_args()
-
-# Run the appropriate function based on the command
-if args.command == 'continue':
-    continue_adventure()
-elif args.command == 'transfer':
-    transfer_to_memory()
-elif args.command == 'rebuild':
-    rebuild_memory()
+if __name__ == '__main__':
+    main()
