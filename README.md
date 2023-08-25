@@ -29,4 +29,7 @@ There is a branch "CLI" that you can switch to. This version has commands `conti
 3. Add openai api key, qdrant api key, qdrant endpoint htttp either as files or paste them directly into the code.
 
 ## How it works
-TODO
+
+A single query is created based on content in all the files and sent to GPT-4 for output. Content in "Current situation" is embedded and searched for in the vectorstore containing sentences from "Summary", current situation is split into paragraphs and best matches are added to "Previously". Here is a diagram:
+![image](https://github.com/OctipusPrime/gmGPT/assets/77053094/55a56743-8896-4483-b18b-aa90fb5f50c2)
+
