@@ -1,0 +1,1 @@
+Ram travels toward Baldur's gate and meets a ranger Brom on the way. Brom warns Ram that there have been attacks on lonely travellers in the past. 

@@ -1,0 +1,1 @@
+Your task is to write a single paragraph that captures the story development and character progression. Use simple sentences and focus on what happened to whom and where. Always use names instead of he/she/it. 

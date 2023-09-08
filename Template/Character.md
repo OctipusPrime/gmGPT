@@ -1,1 +1,1 @@
-Chakotey, a first officer aboard Voyager. 
+Ram Goreling, a dwarven cavalry warrior who rides Chubby (She/her), a large boar. 
